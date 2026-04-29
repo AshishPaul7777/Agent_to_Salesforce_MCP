@@ -1,0 +1,8 @@
+mcp
+langgraph
+chromadb
+google-genai
+httpx
+python-dotenv
+pydantic
+rich

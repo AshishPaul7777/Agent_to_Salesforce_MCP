@@ -1,0 +1,28 @@
+# Environment
+.env
+
+# Virtual environment
+mine/
+venv/
+.venv/
+env/
+
+# ChromaDB vector store (regenerates on first run)
+chroma_db/
+
+# Generated output
+itinerary_output.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
