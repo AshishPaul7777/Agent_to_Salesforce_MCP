@@ -40,16 +40,18 @@ async def research_node(state: ResearchState, mcp: MCPClient) -> dict:
     weather_data = _parse_json(weather_raw, "get_weather")
     transport_data = _parse_json(transport_raw, "get_transport_options")
 
-    # Only use RAG results that are actually relevant (score >= 0.5).
-    # Below that threshold the knowledge base has nothing useful for this query
-    # and the LLM is better off relying on its own training knowledge.
     relevant_hits = [h for h in rag_hits if h.get("score", 0) >= RAG_RELEVANCE_THRESHOLD]
     raw_docs = [h["text"] for h in relevant_hits]
 
     if raw_docs:
-        print_node("Research", f"Retrieved {len(raw_docs)} relevant docs (of {len(rag_hits)}) | weather OK | transport OK")
+        print_node("Research", f"RAG: {len(raw_docs)} relevant docs found | weather OK | transport OK")
     else:
-        print_node("Research", f"No relevant docs found in knowledge base (scores too low) — LLM will use its own knowledge | weather OK | transport OK")
+        print_node("Research", "RAG: no relevant docs — falling back to web search...")
+        web_raw = await mcp.call("web_search", city=city, query="off-beat hidden gems places to visit travel guide")
+        web_data = _parse_json(web_raw, "web_search")
+        web_snippets = [r["snippet"] for r in web_data.get("results", []) if r.get("snippet")]
+        raw_docs = web_snippets
+        print_node("Research", f"Web search: {len(raw_docs)} results | weather OK | transport OK")
 
     return {
         **state,
@@ -75,9 +77,9 @@ async def analyze_node(state: ResearchState) -> dict:
     transport_text = "\n".join(transport_modes)
 
     if state["raw_docs"]:
-        knowledge_section = f"RETRIEVED PLACE KNOWLEDGE (from local knowledge base):\n{chr(10).join('---' + d for d in state['raw_docs'])}"
+        knowledge_section = f"RETRIEVED PLACE KNOWLEDGE:\n{chr(10).join('---' + d for d in state['raw_docs'])}"
     else:
-        knowledge_section = "RETRIEVED PLACE KNOWLEDGE: None available for this city — use your own training knowledge to recommend places."
+        knowledge_section = "RETRIEVED PLACE KNOWLEDGE: None available — use your own training knowledge to recommend places."
 
     prompt = f"""You are an expert travel analyst specializing in off-beat destinations.
 

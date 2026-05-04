@@ -1,4 +1,4 @@
-"""Entry point — Jaipur off-beat itinerary agent."""
+"""Entry point — Travel itinerary agent."""
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +9,7 @@ load_dotenv()
 
 from agent.mcp_client import MCPClient
 from console import console, print_error, print_final, print_step
+from graphs.llm import generate
 from graphs.pipeline import build_pipeline
 from graphs.review_loop import run_review_loop
 from graphs.state import ResearchState
@@ -17,13 +18,26 @@ EXAMPLE_QUERIES = [
     "Plan a 1-day off-beat Jaipur itinerary for a couple who enjoys history and architecture.",
     "Suggest hidden gems in Jaipur for a solo backpacker on a budget.",
     "What should a photography enthusiast visit in Jaipur in the early morning?",
-    "Create a Jaipur itinerary focused on stepwells and Mughal heritage.",
+    "Suggest me a 1 day trip for a group of friends for Rajahmundry.",
 ]
 
 
-async def run(query: str, city: str = "Jaipur") -> None:
-    client = MCPClient()
+async def extract_city(query: str) -> str:
+    """Use LLM to extract the destination city from the user query."""
+    response = await generate(
+        f"Extract only the city name from this travel query. "
+        f"Reply with just the city name, nothing else.\n\nQuery: {query}",
+        temperature=0.0,
+    )
+    return response.strip().strip(".")
 
+
+async def run(query: str) -> None:
+    print_step("Extracting city", "Identifying destination from query...")
+    city = await extract_city(query)
+    print_step("Destination", f"Detected city: {city}")
+
+    client = MCPClient()
     print_step("Connecting", "Starting MCP server and connecting client...")
     await client.connect()
 
@@ -58,7 +72,7 @@ async def run(query: str, city: str = "Jaipur") -> None:
         # ── Stage 2: Writer ↔ Editor review loop ────────────────────────────
         console.rule("[writer]Stage 2: Writer / Editor Review Loop[/writer]")
         topic = (
-            f"Refine and expand this Jaipur itinerary into the best possible version.\n\n"
+            f"Refine and expand this {city} itinerary into the best possible version.\n\n"
             f"{initial_report}"
         )
         polished = await run_review_loop(topic=topic)
@@ -68,7 +82,7 @@ async def run(query: str, city: str = "Jaipur") -> None:
         print_final(polished)
 
         with open("itinerary_output.md", "w", encoding="utf-8") as f:
-            f.write(f"# Query\n\n{query}\n\n---\n\n{polished}\n")
+            f.write(f"# {city} Itinerary\n\n**Query:** {query}\n\n---\n\n{polished}\n")
 
         print_step("Saved", "Itinerary written to itinerary_output.md")
 
@@ -77,7 +91,7 @@ async def run(query: str, city: str = "Jaipur") -> None:
 
 
 def main() -> None:
-    console.rule("[bold cyan]Jaipur Off-Beat Itinerary Agent[/bold cyan]")
+    console.rule("[bold cyan]Travel Itinerary Agent[/bold cyan]")
 
     console.print("\n[dim]Example queries:[/dim]")
     for i, q in enumerate(EXAMPLE_QUERIES, 1):

@@ -1,4 +1,4 @@
-"""MCP server — exposes rag_search, get_weather, get_transport_options as tools."""
+"""MCP server — exposes rag_search, get_weather, get_transport_options, web_search as tools."""
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +6,6 @@ import os
 import sys
 from pathlib import Path
 
-# Make sure `tools/` is importable when this script is spawned as a subprocess.
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
@@ -18,6 +17,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 from tools.rag_tool import RAGSearchTool
+from tools.search_tool import WebSearchTool
 from tools.transport_tool import TransportTool
 from tools.weather_tool import WeatherTool
 
@@ -27,6 +27,7 @@ _CHROMA_DIR = os.getenv("CHROMA_PERSIST_DIR", str(Path(__file__).parent.parent /
 rag = RAGSearchTool(data_path=_DATA_PATH, persist_dir=_CHROMA_DIR)
 weather = WeatherTool()
 transport = TransportTool()
+web_search = WebSearchTool()
 
 server = Server(name="itinerary-mcp", version="1.0.0")
 
@@ -36,7 +37,7 @@ async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="rag_search",
-            description="Semantic search over the Jaipur places knowledge base. Returns relevant place descriptions.",
+            description="Semantic search over the local knowledge base (currently contains Jaipur off-beat places).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -60,7 +61,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="get_transport_options",
-            description="Get local and intercity transport options for a city, including costs and booking methods.",
+            description="Get local transport options for a city, including costs and booking methods.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -69,23 +70,36 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["city"],
             },
         ),
+        types.Tool(
+            name="web_search",
+            description="Search the web for travel information about places to visit in a city. Use this when the local knowledge base has no relevant results.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City to search for"},
+                    "query": {"type": "string", "description": "What to search for, e.g. 'hidden gems off-beat places'"},
+                    "max_results": {"type": "integer", "default": 5},
+                },
+                "required": ["city", "query"],
+            },
+        ),
     ]
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     if name == "rag_search":
-        result = rag.search(
-            query=arguments["query"],
-            top_k=arguments.get("top_k", 3),
-        )
+        result = rag.search(query=arguments["query"], top_k=arguments.get("top_k", 3))
     elif name == "get_weather":
-        result = weather.get_weather(
-            city=arguments["city"],
-            country_code=arguments.get("country_code", "IN"),
-        )
+        result = weather.get_weather(city=arguments["city"], country_code=arguments.get("country_code", "IN"))
     elif name == "get_transport_options":
         result = transport.get_transport_options(city=arguments["city"])
+    elif name == "web_search":
+        result = web_search.search_places(
+            city=arguments["city"],
+            query=arguments.get("query", "places to visit"),
+            max_results=arguments.get("max_results", 5),
+        )
     else:
         result = f"Unknown tool: {name}"
 
